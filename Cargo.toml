@@ -2,6 +2,9 @@
 name = "test-notifier"
 version = "0.1.0"
 edition = "2021"
+description = "a struct that you can put at the top of your tests to output some information about which test ended, and when, and some other information if you want"
+authors = ["Claudia Richoux <c@laudiacay.cool>"]
+license = "MIT OR Apache-2.0"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
