@@ -1,4 +1,17 @@
+#![feature(async_closure)]
+
 use backtrace;
+use futures::executor;
+use lazy_static::lazy_static;
+use nustify::Builder;
+use std::env;
+use tokio::runtime::Runtime;
+use tokio::task;
+use tokio::task::spawn_blocking;
+
+lazy_static! {
+    static ref KEY: String = env::var("IFTTT_TEST_WEBHOOK_KEY").unwrap();
+}
 
 pub struct TestNotifier {
     message: Option<String>,
@@ -12,8 +25,25 @@ impl TestNotifier {
         self.message = Some(message);
     }
     pub fn new_with_message(message: String) -> TestNotifier {
-        TestNotifier { message: Some(message) }
+        TestNotifier {
+            message: Some(message),
+        }
     }
+}
+
+async fn do_notify(test_name: String, extra_message: Option<String>) {
+    println!("test_name: {}", test_name);
+    println!("message: {:?}", extra_message.clone());
+    let extra_message = extra_message.unwrap_or_else(|| "no extra message".to_string());
+    let output = format!(
+        "test {} is done. also, my caller says: {}",
+        test_name,
+        extra_message.clone()
+    );
+    let notification = Builder::new(output.clone())
+        .title("Hello from Rust test notifier".to_owned())
+        .build();
+    nustify::send(&notification, "nustify", &KEY).await.unwrap();
 }
 
 impl Drop for TestNotifier {
@@ -23,16 +53,25 @@ impl Drop for TestNotifier {
         backtrace::trace(|frame| {
             backtrace::resolve_frame(frame, |symbol| {
                 if !printed_my_message {
-                    let sn = symbol.name().map_or_else(
-                        || { format!("unknown")}, |sn| format!("{:?}", sn));
+                    let sn = symbol
+                        .name()
+                        .map_or_else(|| format!("unknown"), |sn| format!("{:?}", sn));
                     // println!("symbol: {:?}", sn);
                     if sn.contains("core::ptr::drop_in_place<test_notifier::TestNotifier>") {
                         found_my_drop = true;
                     } else if found_my_drop {
-                        println!("test {:?} is done", sn);
-                        if let Some(msg) = self.message.as_ref() {
-                            println!("also... my caller wanted me to tell you: {}", msg);
-                        }
+                        let msg = self.message.clone();
+                        let rt = tokio::runtime::Runtime::new().unwrap();
+                        let local = task::LocalSet::new();
+                        local.block_on(&rt, async {
+                            let join = task::spawn_local(async move {
+                                spawn_blocking(move || do_notify(sn, msg))
+                                    .await
+                                    .unwrap()
+                                    .await;
+                            });
+                            join.await.unwrap();
+                        });
                         printed_my_message = true;
                     }
                 }
@@ -41,10 +80,21 @@ impl Drop for TestNotifier {
         });
     }
 }
+#[cfg(test)]
+mod tests {
+    use super::*;
 
-#[test]
-fn test() {
-    let mut tn = TestNotifier::new();
-    tn.set_message("hello".to_string());
-    assert!(false);
+    #[test]
+    fn test_failing() {
+        let mut tn = TestNotifier::new();
+        tn.set_message("about to fail".to_string());
+        assert!(false);
+    }
+
+    #[test]
+    fn test_passing() {
+        let mut tn = TestNotifier::new();
+        tn.set_message("about to pass".to_string());
+        assert!(true);
+    }
 }

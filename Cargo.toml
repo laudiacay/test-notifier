@@ -12,3 +12,6 @@ readme = "README.md"
 [dependencies]
 backtrace = "0.3.67"
 nustify = "0.2"
+lazy_static = "1.4.0"
+tokio = {version = "1.25.0", features = ["rt", "macros", "rt-multi-thread"]}
+futures = {version = "0.3.26", features = ["executor"]}
