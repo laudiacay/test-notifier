@@ -1,11 +1,9 @@
 #![feature(async_closure)]
 
-use backtrace;
-use futures::executor;
 use lazy_static::lazy_static;
 use nustify::Builder;
 use std::env;
-use tokio::runtime::Runtime;
+
 use tokio::task;
 use tokio::task::spawn_blocking;
 
@@ -31,8 +29,14 @@ impl TestNotifier {
     }
 }
 
+impl Default for TestNotifier {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 async fn do_notify(test_name: String, extra_message: Option<String>) {
-    println!("test_name: {}", test_name);
+    println!("test_name: {test_name}");
     println!("message: {:?}", extra_message.clone());
     let extra_message = extra_message.unwrap_or_else(|| "no extra message".to_string());
     let output = format!(
@@ -55,7 +59,7 @@ impl Drop for TestNotifier {
                 if !printed_my_message {
                     let sn = symbol
                         .name()
-                        .map_or_else(|| format!("unknown"), |sn| format!("{:?}", sn));
+                        .map_or_else(|| "unknown".to_string(), |sn| format!("{sn:?}"));
                     // println!("symbol: {:?}", sn);
                     if sn.contains("core::ptr::drop_in_place<test_notifier::TestNotifier>") {
                         found_my_drop = true;
